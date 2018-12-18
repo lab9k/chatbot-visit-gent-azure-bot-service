@@ -1,0 +1,6 @@
+select distinct 
+  ?property 
+where {
+  ?instance a <http://schema.org/Event> . 
+  ?instance ?property ?obj . 
+}
