@@ -1,4 +1,4 @@
 export enum RequestType {
-  EVENTS,
-  ATTRACTIONS,
+  EVENTS = 'Events',
+  ATTRACTIONS = 'Places',
 }

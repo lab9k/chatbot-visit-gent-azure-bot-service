@@ -17,7 +17,7 @@ import {
 // Import required bot configuration.
 import { BotConfiguration, IEndpointService } from 'botframework-config';
 
-import { EchoBot } from './bot';
+import { VisitBot } from './bot';
 
 // Read botFilePath and botFileSecret from .env file
 // Note: Ensure you have a .env file and include botFilePath and botFileSecret.
@@ -103,7 +103,7 @@ const userState = new UserState(memoryStorage);
 // conversationState = new ConversationState(blobStorage);
 
 // Create the EchoBot.
-const bot = new EchoBot(conversationState, userState);
+const bot = new VisitBot(conversationState, userState);
 
 // Create HTTP server
 const server = restify.createServer();

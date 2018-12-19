@@ -3,7 +3,9 @@
 
 import {
   ActivityTypes,
+  CardFactory,
   ConversationState,
+  MessageFactory,
   StatePropertyAccessor,
   TurnContext,
   UserState,
@@ -15,7 +17,7 @@ import {
   WaterfallDialog,
   WaterfallStepContext,
 } from 'botbuilder-dialogs';
-import { getData, RequestType } from './data';
+import { getDataCards, RequestType } from './data';
 
 import { sample } from 'lodash';
 
@@ -26,7 +28,9 @@ const WHO_ARE_YOU = 'who_are_you';
 const DIALOG_STATE_PROPERTY = 'dialog_state_prop';
 const HELLO_USER = 'hello_user';
 
-export class EchoBot {
+const WHAT_DATA = 'what_data';
+
+export class VisitBot {
   private readonly conversationState: ConversationState;
   private readonly userState: UserState;
   private readonly dialogState: StatePropertyAccessor<any>;
@@ -60,6 +64,13 @@ export class EchoBot {
     this.dialogs.add(
       new WaterfallDialog(HELLO_USER, [this.displayName.bind(this)]),
     );
+
+    this.dialogs.add(
+      new WaterfallDialog(WHAT_DATA, [
+        this.askWhatToFetch.bind(this),
+        this.displayResults.bind(this),
+      ]),
+    );
   }
 
   /**
@@ -72,16 +83,19 @@ export class EchoBot {
       const dc = await this.dialogs.createContext(turnContext);
 
       if (!turnContext.responded) {
+        // continue the multistep dialog that's already begun, won't do anything if there is no running dialog
         await dc.continueDialog();
       }
 
       if (!turnContext.responded) {
-        const userName = await this.userName.get(dc.context, null);
-        if (userName) {
-          await dc.beginDialog(HELLO_USER);
-        } else {
-          await dc.beginDialog(WHO_ARE_YOU);
-        }
+        // const userName = await this.userName.get(dc.context, null);
+        // if (userName) {
+        //   await dc.beginDialog(HELLO_USER);
+        // } else {
+        //   await dc.beginDialog(WHO_ARE_YOU);
+        // }
+        // ? if the dialog did not continue, we can start it here.
+        await dc.beginDialog(WHAT_DATA);
       }
     } else if (turnContext.activity.type === ActivityTypes.ConversationUpdate) {
       // Do we have any new members added to the conversation?
@@ -123,10 +137,29 @@ export class EchoBot {
   }
 
   private async displayName(step: WaterfallStepContext) {
-    const data = await getData(RequestType.ATTRACTIONS);
+    const data = await getDataCards(RequestType.ATTRACTIONS);
     const toSend = sample(data);
     // const userName = await this.userName.get(step.context, null);
     await step.context.sendActivity(`Your name is ${toSend.name}.`);
+    await step.endDialog();
+  }
+
+  private async askWhatToFetch(step: WaterfallStepContext) {
+    const reply = MessageFactory.suggestedActions(
+      [RequestType.EVENTS, RequestType.ATTRACTIONS],
+      'What would you like to see?',
+    );
+    await step.context.sendActivity(reply);
+  }
+
+  private async displayResults(step: WaterfallStepContext) {
+    const data = await getDataCards(step.result);
+
+    await step.context.sendActivity({
+      attachmentLayout: 'carousel',
+      attachments: [...data],
+    });
+    await step.context.sendActivity(`Would you like to see something else?`);
     await step.endDialog();
   }
 }
