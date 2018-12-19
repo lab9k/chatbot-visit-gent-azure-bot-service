@@ -39,7 +39,7 @@ export class SparqlApi {
 
 const onlyNl = (item: { name: { 'xml:lang': string } }): boolean =>
   item.name['xml:lang'] === 'nl';
-const rawParse = (rawData: IRawData): Array<Dictionary<any>> => {
+const rawParse = (rawData: IRawData): Dictionary<any>[] => {
   const {
     head: { vars: properties },
     results: { bindings: items },

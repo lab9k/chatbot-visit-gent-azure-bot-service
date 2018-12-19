@@ -42,7 +42,8 @@ export class VisitBot {
    */
   constructor(conversationState: ConversationState, userState: UserState) {
     // Create a new state accessor property.
-    // See https://aka.ms/about-bot-state-accessors to learn more about the bot state and state accessors.
+    // See https://aka.ms/about-bot-state-accessors to
+    // learn more about the bot state and state accessors.
     this.conversationState = conversationState;
     this.userState = userState;
 
@@ -74,7 +75,8 @@ export class VisitBot {
   }
 
   /**
-   * Use onTurn to handle an incoming activity, received from a user, process it, and reply as needed
+   * Use onTurn to handle an incoming activity,
+   * received from a user, process it, and reply as needed
    *
    * @param {TurnContext} context on turn context object.
    */
@@ -83,7 +85,8 @@ export class VisitBot {
       const dc = await this.dialogs.createContext(turnContext);
 
       if (!turnContext.responded) {
-        // continue the multistep dialog that's already begun, won't do anything if there is no running dialog
+        // ? continue the multistep dialog that's already begun
+        // ? won't do anything if there is no running dialog
         await dc.continueDialog();
       }
 
