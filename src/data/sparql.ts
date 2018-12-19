@@ -1,7 +1,8 @@
 import axios from 'axios';
 import * as fs from 'fs';
-import { filter, map, mapValues, pick } from 'lodash';
+import { Dictionary, filter, map, mapValues, pick } from 'lodash';
 import * as path from 'path';
+import { IRawData } from '../models/rawData';
 
 export class SparqlApi {
   private readonly options = {
@@ -36,8 +37,9 @@ export class SparqlApi {
   }
 }
 
-const onlyNl = (item) => item.name['xml:lang'] === 'nl';
-const rawParse = (rawData) => {
+const onlyNl = (item: { name: { 'xml:lang': string } }): boolean =>
+  item.name['xml:lang'] === 'nl';
+const rawParse = (rawData: IRawData): Array<Dictionary<any>> => {
   const {
     head: { vars: properties },
     results: { bindings: items },
