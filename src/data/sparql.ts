@@ -29,7 +29,7 @@ export class SparqlApi {
     return rawParse(d);
   }
 
-  private async query(query: string): Promise<any> {
+  private async query(query: string): Promise<IRawData> {
     const { data } = await axios.get(this.baseUrl, {
       params: { ...this.options, query },
     });

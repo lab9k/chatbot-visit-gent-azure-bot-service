@@ -4,9 +4,9 @@
     "services": [
         {
             "type": "endpoint",
-            "endpoint": "http://localhost:3987/api/messages",
-            "name": "development",
-            "id": "112"
+            "endpoint": "http://localhost:3978/api/messages",
+            "id": "112",
+            "name": "development"
         }
     ],
     "padlock": "",

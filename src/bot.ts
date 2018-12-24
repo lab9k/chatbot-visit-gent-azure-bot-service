@@ -14,6 +14,7 @@ import {
   DialogContext,
   DialogSet,
   TextPrompt,
+  ConfirmPrompt,
   WaterfallDialog,
   WaterfallStepContext,
 } from 'botbuilder-dialogs';
@@ -22,20 +23,18 @@ import { getDataCards, RequestType } from './data';
 import { sample } from 'lodash';
 
 // Turn counter property
-const USER_NAME_PROP = 'user_name_prop';
-const NAME_PROMPT = 'name_prompt';
-const WHO_ARE_YOU = 'who_are_you';
+const OTHER_DATA_PROMPT = 'other_data_prompt';
 const DIALOG_STATE_PROPERTY = 'dialog_state_prop';
-const HELLO_USER = 'hello_user';
-
+const WANTS_INFO_PROPERTY = 'wants_info';
 const WHAT_DATA = 'what_data';
+const RESET_DIALOG = 'reset_dialog';
 
 export class VisitBot {
   private readonly conversationState: ConversationState;
-  private readonly userState: UserState;
   private readonly dialogState: StatePropertyAccessor<any>;
   private readonly dialogs: DialogSet;
-  private readonly userName: StatePropertyAccessor<any>;
+  private readonly userState: UserState;
+  private readonly wantsInfo: StatePropertyAccessor<boolean>;
   /**
    *
    * @param {ConversationState} conversation state object
@@ -50,27 +49,22 @@ export class VisitBot {
     this.dialogState = this.conversationState.createProperty(
       DIALOG_STATE_PROPERTY,
     );
-    this.userName = this.userState.createProperty(USER_NAME_PROP);
+    this.wantsInfo = this.userState.createProperty(WANTS_INFO_PROPERTY);
 
     this.dialogs = new DialogSet(this.dialogState);
 
-    this.dialogs.add(new TextPrompt(NAME_PROMPT));
-    this.dialogs.add(
-      new WaterfallDialog(WHO_ARE_YOU, [
-        this.askForName.bind(this),
-        this.collectAndDisplayName.bind(this),
-      ]),
-    );
-
-    this.dialogs.add(
-      new WaterfallDialog(HELLO_USER, [this.displayName.bind(this)]),
-    );
+    this.dialogs.add(new ConfirmPrompt(OTHER_DATA_PROMPT));
 
     this.dialogs.add(
       new WaterfallDialog(WHAT_DATA, [
         this.askWhatToFetch.bind(this),
         this.displayResults.bind(this),
+        this.handlePrompt.bind(this),
       ]),
+    );
+
+    this.dialogs.add(
+      new WaterfallDialog(RESET_DIALOG, [this.resetUser.bind(this)]),
     );
   }
 
@@ -81,70 +75,42 @@ export class VisitBot {
    * @param {TurnContext} context on turn context object.
    */
   public async onTurn(turnContext: TurnContext) {
-    if (turnContext.activity.type === ActivityTypes.Message) {
-      const dc = await this.dialogs.createContext(turnContext);
+    switch (turnContext.activity.type) {
+      case ActivityTypes.Message:
+        const dc = await this.dialogs.createContext(turnContext);
 
-      if (!turnContext.responded) {
+        if (dc.context.activity.text === 'Reset') {
+          return await dc.beginDialog(RESET_DIALOG);
+        }
         // ? continue the multistep dialog that's already begun
         // ? won't do anything if there is no running dialog
         await dc.continueDialog();
-      }
 
-      if (!turnContext.responded) {
-        // const userName = await this.userName.get(dc.context, null);
-        // if (userName) {
-        //   await dc.beginDialog(HELLO_USER);
-        // } else {
-        //   await dc.beginDialog(WHO_ARE_YOU);
-        // }
-        // ? if the dialog did not continue, we can start it here.
-        await dc.beginDialog(WHAT_DATA);
-      }
-    } else if (turnContext.activity.type === ActivityTypes.ConversationUpdate) {
-      // Do we have any new members added to the conversation?
-      if (turnContext.activity.membersAdded.length !== 0) {
-        // Iterate over all new members added to the conversation
-        for (const idx in turnContext.activity.membersAdded) {
-          // Greet anyone that was not the target (recipient) of this message.
-          // Since the bot is the recipient for events from the channel,
-          // context.activity.membersAdded === context.activity.recipient.Id indicates the
-          // bot was added to the conversation, and the opposite indicates this is a user.
-          if (
-            turnContext.activity.membersAdded[idx].id !==
-            turnContext.activity.recipient.id
-          ) {
-            // Send a "this is what the bot does" message to this user.
-            await turnContext.sendActivity(
-              'I am a bot that demonstrates the TextPrompt class to collect your name,' +
-                ' store it in UserState, and display it. Say anything to continue.',
+        // ? Begin main dialog if no outstanding dialogs/ no one responded.
+        if (!dc.context.responded) {
+          const getInfo = await this.wantsInfo.get(dc.context, true);
+          if (getInfo) {
+            await dc.beginDialog(WHAT_DATA);
+          } else {
+            // ask if he wants info anyway
+            await dc.context.sendActivity(
+              'Alright, i won\'t bother you until you send me another message.',
             );
+            await this.wantsInfo.set(dc.context, true);
           }
         }
-      }
+        break;
+      case ActivityTypes.ConversationUpdate:
+        await this.welcomeUser(turnContext);
+        break;
+      default:
+        break;
     }
     // Save changes to the user name.
     await this.userState.saveChanges(turnContext);
 
     // End this turn by saving changes to the conversation state.
     await this.conversationState.saveChanges(turnContext);
-  }
-
-  private async askForName(dc: DialogContext) {
-    await dc.prompt(NAME_PROMPT, 'What is your name, human?');
-  }
-
-  private async collectAndDisplayName(step: WaterfallStepContext) {
-    await this.userName.set(step.context, step.result);
-    await step.context.sendActivity(`Got it. You are ${step.result}.`);
-    await step.endDialog();
-  }
-
-  private async displayName(step: WaterfallStepContext) {
-    const data = await getDataCards(RequestType.ATTRACTIONS);
-    const toSend = sample(data);
-    // const userName = await this.userName.get(step.context, null);
-    await step.context.sendActivity(`Your name is ${toSend.name}.`);
-    await step.endDialog();
   }
 
   private async askWhatToFetch(step: WaterfallStepContext) {
@@ -156,13 +122,62 @@ export class VisitBot {
   }
 
   private async displayResults(step: WaterfallStepContext) {
-    const data = await getDataCards(step.result);
+    let data = [];
+    try {
+      data = await getDataCards(step.result);
+    } catch (error) {
+      await step.context.sendActivity('Please click one of the buttons.');
+      return await step.replaceDialog(WHAT_DATA);
+    }
 
     await step.context.sendActivity({
       attachmentLayout: 'carousel',
       attachments: [...data],
     });
-    await step.context.sendActivity(`Would you like to see something else?`);
+    await step.prompt(
+      OTHER_DATA_PROMPT,
+      `Would you like to see something else?`,
+    );
+    // await step.endDialog();
+  }
+
+  private async handlePrompt(step: WaterfallStepContext) {
+    const reply = step.result;
+    this.wantsInfo.set(step.context, reply);
     await step.endDialog();
+  }
+
+  private async welcomeUser(turnContext: TurnContext) {
+    // Do we have any new members added to the conversation?
+    if (turnContext.activity.membersAdded.length !== 0) {
+      // Iterate over all new members added to the conversation
+      for (const idx in turnContext.activity.membersAdded) {
+        // Greet anyone that was not the target (recipient) of this message.
+        // Since the bot is the recipient for events from the channel,
+        // context.activity.membersAdded === context.activity.recipient.Id indicates the
+        // bot was added to the conversation, and the opposite indicates this is a user.
+        if (
+          turnContext.activity.membersAdded[idx].id !==
+          turnContext.activity.recipient.id
+        ) {
+          // Send a "this is what the bot does" message to this user.
+          await turnContext.sendActivity(
+            'I am a bot that displays the events and attractions in Ghent.' +
+              ' Data is coming from https://visit.gent.be/nl',
+          );
+        }
+      }
+    }
+  }
+
+  private async resetUser(step: WaterfallStepContext) {
+    await this.userState.clear(step.context);
+    await this.conversationState.clear(step.context);
+    await step.context.sendActivity('Conversation Reset');
+    await step.cancelAllDialogs();
+    await step.endDialog();
+
+    await this.userState.saveChanges(step.context);
+    await this.conversationState.saveChanges(step.context);
   }
 }
